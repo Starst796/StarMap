@@ -92,6 +92,40 @@
     dAlt[i] = -90;
   }
 
+  // --------------------------------------------------- reference planes ---
+  function planeVectors(points) {
+    const n = points.length;
+    const plane = {
+      n,
+      vx: new Float64Array(n),
+      vy: new Float64Array(n),
+      vz: new Float64Array(n),
+      az: new Float32Array(n),
+      alt: new Float32Array(n).fill(-90)
+    };
+    for (let i = 0; i < n; i += 1) {
+      const ra = points[i][0] * DEG;
+      const dec = points[i][1] * DEG;
+      const cd = Math.cos(dec);
+      plane.vx[i] = cd * Math.cos(ra);
+      plane.vy[i] = cd * Math.sin(ra);
+      plane.vz[i] = Math.sin(dec);
+    }
+    return plane;
+  }
+
+  const eclipticPlane = planeVectors(CATALOG.ecliptic || []);
+  const galacticPlane = planeVectors(CATALOG.galactic || []);
+  const PLANE_MAX = Math.max(eclipticPlane.n, galacticPlane.n, 1);
+  const planeX = new Float32Array(PLANE_MAX);
+  const planeY = new Float32Array(PLANE_MAX);
+  const planeInside = new Uint8Array(PLANE_MAX);
+
+  function resetPlanes() {
+    eclipticPlane.alt.fill(-90);
+    galacticPlane.alt.fill(-90);
+  }
+
   // ----------------------------------------------------------------- state ---
   const RATES = [
     { v: 1, label: '1× 实时' },
@@ -114,6 +148,8 @@
     tab: 'solar',
     query: '',
     maxMag: 12,
+    showEcliptic: true,
+    showGalactic: true,
     selected: null,
     invalid: true
   };
@@ -274,12 +310,14 @@
   function computePositions() {
     if (!window.Astronomy) {
       solarPos = [];
+      resetPlanes();
       return;
     }
     const observer = selectedObserver();
     if (!observer) {
       $('#location-status').textContent = '坐标超出范围：纬度 −90° 至 90°，经度 −180° 至 180°。';
       solarPos = [];
+      resetPlanes();
       return;
     }
     $('#location-status').textContent = '坐标只在本机使用。';
@@ -309,6 +347,15 @@
       const vx = dVx[i], vy = dVy[i], vz = dVz[i];
       toAltAz(m00 * vx + m01 * vy + m02 * vz, m10 * vx + m11 * vy + m12 * vz, m20 * vx + m21 * vy + m22 * vz, lstDeg, sinLat, cosLat, dAz, dAlt, i);
     }
+
+    const transformPlane = (plane) => {
+      for (let i = 0; i < plane.n; i += 1) {
+        const vx = plane.vx[i], vy = plane.vy[i], vz = plane.vz[i];
+        toAltAz(m00 * vx + m01 * vy + m02 * vz, m10 * vx + m11 * vy + m12 * vz, m20 * vx + m21 * vy + m22 * vz, lstDeg, sinLat, cosLat, plane.az, plane.alt, i);
+      }
+    };
+    transformPlane(eclipticPlane);
+    transformPlane(galacticPlane);
 
     const nextSolar = [];
     for (const body of SOLAR) {
@@ -342,6 +389,69 @@
   }
 
   // ---------------------------------------------------------------- drawing ---
+  function clipToCircle(x0, y0, x1, y1, cx, cy, r) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const fx = x0 - cx;
+    const fy = y0 - cy;
+    const a = dx * dx + dy * dy;
+    if (a < 1e-9) return null;
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - r * r;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+    const root = Math.sqrt(disc);
+    const t1 = (-b - root) / (2 * a);
+    if (t1 >= 0 && t1 <= 1) return t1;
+    const t2 = (-b + root) / (2 * a);
+    if (t2 >= 0 && t2 <= 1) return t2;
+    return null;
+  }
+
+  /** Draw a great-circle reference line, clipping it at the horizon (r = radius). */
+  function drawPlane(plane, radius, cx, cy, headingRad, color, dash) {
+    if (!plane.n || plane.n > PLANE_MAX) return;
+    for (let i = 0; i < plane.n; i += 1) {
+      const r = radius * (90 - plane.alt[i]) / 90;
+      const angle = plane.az[i] * DEG - headingRad;
+      planeX[i] = cx - Math.sin(angle) * r;
+      planeY[i] = cy - Math.cos(angle) * r;
+      planeInside[i] = r <= radius ? 1 : 0;
+    }
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.3;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    let drawing = false;
+    for (let i = 0; i < plane.n; i += 1) {
+      if (!planeInside[i]) {
+        // Leaving the sky: finish the run exactly on the horizon circle.
+        if (drawing) {
+          const t = clipToCircle(planeX[i - 1], planeY[i - 1], planeX[i], planeY[i], cx, cy, radius);
+          if (t !== null) ctx.lineTo(planeX[i - 1] + (planeX[i] - planeX[i - 1]) * t, planeY[i - 1] + (planeY[i] - planeY[i - 1]) * t);
+          drawing = false;
+        }
+        continue;
+      }
+      if (!drawing) {
+        // Entering the sky: start the run on the horizon circle.
+        if (i > 0 && !planeInside[i - 1]) {
+          const t = clipToCircle(planeX[i - 1], planeY[i - 1], planeX[i], planeY[i], cx, cy, radius);
+          if (t !== null) ctx.moveTo(planeX[i - 1] + (planeX[i] - planeX[i - 1]) * t, planeY[i - 1] + (planeY[i] - planeY[i - 1]) * t);
+          else ctx.moveTo(planeX[i], planeY[i]);
+        } else {
+          ctx.moveTo(planeX[i], planeY[i]);
+        }
+        drawing = true;
+      } else {
+        ctx.lineTo(planeX[i], planeY[i]);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function project(az, alt, radius, cx, cy, headingRad) {
     const r = radius * (90 - alt) / 90;
     const angle = az * DEG - headingRad;
@@ -402,6 +512,10 @@
       ctx.fillText(labels[azimuth] || `${azimuth}°`, -Math.sin(angle) * labelRadius, -Math.cos(angle) * labelRadius);
     }
     ctx.restore();
+
+    // Ecliptic and galactic plane centre lines, clipped to the horizon circle.
+    if (state.showEcliptic) drawPlane(eclipticPlane, radius, cx, cy, headingRad, 'rgba(236,137,115,.62)', [7, 5]);
+    if (state.showGalactic) drawPlane(galacticPlane, radius, cx, cy, headingRad, 'rgba(150,172,214,.6)', [2, 4]);
 
     hits = [];
 
@@ -865,6 +979,18 @@
     if (state.tab === 'star' || state.tab === 'deep') renderList();
     invalidate(false);
   });
+
+  function wirePlaneToggle(id, key) {
+    const button = $(id);
+    if (!button) return;
+    button.addEventListener('click', () => {
+      state[key] = !state[key];
+      button.setAttribute('aria-pressed', state[key] ? 'true' : 'false');
+      invalidate(false);
+    });
+  }
+  wirePlaneToggle('#ecliptic-toggle', 'showEcliptic');
+  wirePlaneToggle('#galactic-toggle', 'showGalactic');
 
   let dragStart = null;
   let dragMoved = false;

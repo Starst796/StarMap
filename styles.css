@@ -50,10 +50,15 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 600; letter-spac
 .sky-caption { position: absolute; left: 16px; bottom: 15px; display: flex; align-items: center; gap: 8px; color: rgba(218,228,218,.7); font-size: 10px; pointer-events: none; }
 .caption-dot { background: var(--amber); box-shadow: 0 0 8px rgba(237,191,118,.5); }
 .zenith-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(222,235,220,.4); font: 9px var(--mono); pointer-events: none; }
-.sky-footer { height: 52px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
-.legend { display: flex; gap: 18px; color: var(--muted); font-size: 10px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sky-footer { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.legend { display: flex; gap: 18px; color: var(--muted); font-size: 10px; flex-wrap: wrap; }
+.legend span, .legend-toggle { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.legend-toggle { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.legend-toggle:hover { color: var(--ink); }
+.legend-toggle[aria-pressed=false] { opacity: .38; }
+.legend i.legend-plane-ecliptic { width: 13px; height: 2px; border-radius: 1px; background: rgba(236,137,115,.95); }
+.legend i.legend-plane-galactic { width: 13px; height: 2px; border-radius: 1px; background: rgba(150,172,214,.95); }
 .legend-star { background: #d5e6d3; box-shadow: 0 0 5px #c4ddca; }
 .legend-planet { background: var(--mint); }
 .legend-moon { background: #c6cfd0; }
@@ -153,6 +158,6 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border: 2px sol
 
 @media (min-height: 900px) { .workspace { padding-top: 35px; padding-bottom: 26px; } .control-section { margin-bottom: 23px; padding-bottom: 23px; } .sky-stage { min-height: 520px; } }
 @media (max-width: 980px) { .app-shell { padding: 0 22px; } .workspace { grid-template-columns: minmax(0, 1fr) 312px; gap: 20px; } .control-panel { padding-left: 18px; } .sky-stage { min-height: 420px; } .legend { gap: 11px; } }
-@media (max-width: 720px) { .app-shell { padding: 0 16px; } .topbar { height: 62px; } .topbar-meta { font-size: 9px; } .topbar-meta .meta-divider, .topbar-meta > span:last-child { display: none; } .workspace { display: flex; flex-direction: column; gap: 22px; padding-top: 20px; } .sky-header { min-height: 65px; } h1 { font-size: 20px; } .sky-stage { flex: none; height: min(112vw, 570px); min-height: 350px; } .sky-footer { height: 47px; } .legend { gap: 10px; font-size: 9px; } .legend span { gap: 5px; } .zoom-controls { gap: 6px; } .control-panel { padding: 0; border: 0; } .control-section { padding-bottom: 17px; margin-bottom: 17px; } .section-heading { margin-bottom: 14px; } .object-row { min-height: 42px; } .app-footer { height: 42px; font-size: 8px; } }
+@media (max-width: 720px) { .app-shell { padding: 0 16px; } .topbar { height: 62px; } .topbar-meta { font-size: 9px; } .topbar-meta .meta-divider, .topbar-meta > span:last-child { display: none; } .workspace { display: flex; flex-direction: column; gap: 22px; padding-top: 20px; } .sky-header { min-height: 65px; } h1 { font-size: 20px; } .sky-stage { flex: none; height: min(112vw, 570px); min-height: 350px; } .sky-footer { min-height: 47px; } .legend { gap: 10px; font-size: 9px; } .legend span, .legend-toggle { gap: 5px; } .zoom-controls { gap: 6px; } .control-panel { padding: 0; border: 0; } .control-section { padding-bottom: 17px; margin-bottom: 17px; } .section-heading { margin-bottom: 14px; } .object-row { min-height: 42px; } .app-footer { height: 42px; font-size: 8px; } }
 @media (max-width: 390px) { .app-shell { padding: 0 12px; } .brand-en { display: none; } .weather-note { font-size: 9px; } .legend { gap: 7px; font-size: 8px; } .object-row { grid-template-columns: minmax(0,1fr) 58px 57px; } .detail-card { left: 12px; right: 12px; width: auto; } }
 @media (max-width: 720px) { .object-list { max-height: 52vh; } }
