@@ -112,7 +112,7 @@
     direction: 1,
     tab: 'solar',
     query: '',
-    maxMag: 6.5,
+    maxMag: 12,
     selected: null,
     invalid: true
   };
@@ -404,9 +404,10 @@
 
     hits = [];
 
+    const maxMag = state.maxMag;
     for (let i = 0; i < ND; i += 1) {
       const alt = dAlt[i];
-      if (alt < 0) continue;
+      if (alt < 0 || deep[i].mag > maxMag) continue;
       const point = project(dAz[i], alt, radius, cx, cy, headingRad);
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(237,191,118,.62)';
@@ -416,7 +417,6 @@
       hits.push({ kind: 'deep', index: i, x: point.x, y: point.y, weight: 2 });
     }
 
-    const maxMag = state.maxMag;
     for (let i = 0; i < NS; i += 1) {
       const alt = sAlt[i];
       if (alt < 0 || sMag[i] > maxMag) continue;
@@ -611,7 +611,11 @@
       const list = [];
       for (let i = 0; i < ND; i += 1) {
         const obj = deep[i];
-        if (query && !`${obj.label} ${obj.en || ''} ${obj.n}`.toLowerCase().includes(query)) continue;
+        if (query) {
+          if (!`${obj.label} ${obj.en || ''} ${obj.n}`.toLowerCase().includes(query)) continue;
+        } else if (obj.mag > state.maxMag) {
+          continue;
+        }
         list.push({ kind: 'deep', index: i, id: selectionId('deep', i), label: obj.label, sub: obj.t, symbol: '✦', color: '#edbf76' });
         if (list.length >= 400) break;
       }
@@ -632,7 +636,7 @@
 
   function updateObjectCount(count) {
     let total = SOLAR.length;
-    if (state.tab === 'deep') total = ND;
+    if (state.tab === 'deep') total = state.query ? ND : deepCountWithinLimit();
     if (state.tab === 'star') total = state.query ? NS : starCountWithinLimit();
     $('#object-count').textContent = state.query ? `${count} / ${total} 匹配` : `${total} ${state.tab === 'solar' ? 'BODIES' : 'OBJECTS'}`;
   }
@@ -640,6 +644,12 @@
   function starCountWithinLimit() {
     let count = 0;
     for (let i = 0; i < NS; i += 1) if (sMag[i] <= state.maxMag) count += 1;
+    return count;
+  }
+
+  function deepCountWithinLimit() {
+    let count = 0;
+    for (let i = 0; i < ND; i += 1) if (deep[i].mag <= state.maxMag) count += 1;
     return count;
   }
 
@@ -851,7 +861,7 @@
   magSlider.addEventListener('input', () => {
     state.maxMag = Number(magSlider.value);
     $('#mag-value').textContent = state.maxMag.toFixed(1);
-    if (state.tab === 'star') renderList();
+    if (state.tab === 'star' || state.tab === 'deep') renderList();
     invalidate(false);
   });
 
