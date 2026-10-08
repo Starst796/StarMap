@@ -262,10 +262,11 @@
     const sinAlt = vz * sinLat + cosDec * cosLat * Math.cos(H);
     const clamped = sinAlt > 1 ? 1 : (sinAlt < -1 ? -1 : sinAlt);
     altOut[index] = Math.asin(clamped) * RAD2DEG;
-    const cosAlt = Math.sqrt(Math.max(0, 1 - clamped * clamped));
-    const sinAz = -Math.sin(H) * cosDec;
-    const cosAz = cosAlt > 1e-9 ? (vz - sinLat * clamped) / (cosLat * cosAlt) : 0;
-    let az = Math.atan2(sinAz, cosAz) * RAD2DEG;
+    // Azimuth from north, increasing toward east. Both terms are the (E, N)
+    // components of the horizontal unit vector, so they share one scale factor.
+    const east = -Math.sin(H) * cosDec;
+    const north = cosLat > 1e-9 ? (vz - sinLat * clamped) / cosLat : 0;
+    let az = Math.atan2(east, north) * RAD2DEG;
     if (az < 0) az += 360;
     azOut[index] = az;
   }
