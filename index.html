@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101a1d">
+  <title>穹顶 · 实时星图</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js" onerror="window.astronomyLoadFailed=true"></script>
+  <script src="catalog.js" onerror="window.catalogLoadFailed=true"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="穹顶主页">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span>穹顶<span class="brand-en"> / SKY ATLAS</span></span>
+      </a>
+      <div class="topbar-meta"><span class="live-indicator"></span><span id="engine-status">天文引擎连接中</span><span class="meta-divider"></span><span>本地星图</span></div>
+    </header>
+
+    <section class="workspace" aria-label="星图工作区">
+      <section class="sky-panel" aria-label="交互式星图">
+        <div class="sky-header">
+          <div><p class="eyebrow">SKY / DOME VIEW</p><h1>此刻的天空</h1></div>
+          <div class="sky-header-right"><span class="sky-date" id="sky-date">--</span><span class="weather-note">地平坐标 · 仰视（东在左）</span></div>
+        </div>
+        <div class="sky-stage" id="sky-stage">
+          <canvas id="sky-canvas" aria-label="可拖动旋转的星图"></canvas>
+          <div class="canvas-hint"><span class="drag-glyph" aria-hidden="true">↔</span><span>拖动旋转 · 点击天体查看详情</span></div>
+          <div class="sky-readout"><span class="readout-label">视场中心</span><strong id="heading-readout">000°</strong><span id="heading-cardinal">北</span></div>
+          <div class="sky-caption"><span class="caption-dot"></span><span id="sky-caption-text">正在计算当前天象</span></div>
+          <div class="zenith-label">天顶</div>
+          <div class="detail-card" id="detail-card" hidden>
+            <button class="detail-close" id="detail-close" type="button" aria-label="关闭详情">×</button>
+            <p class="detail-kind" id="detail-kind">天体</p>
+            <h3 class="detail-title" id="detail-title">—</h3>
+            <div class="detail-grid">
+              <div><span>方位</span><strong id="detail-azimuth">—</strong></div>
+              <div><span>高度</span><strong id="detail-altitude">—</strong></div>
+              <div><span>视星等</span><strong id="detail-magnitude">—</strong></div>
+              <div><span>赤道坐标</span><strong id="detail-equatorial">—</strong></div>
+            </div>
+            <p class="detail-note" id="detail-note">—</p>
+          </div>
+        </div>
+        <div class="sky-footer">
+          <div class="legend"><span><i class="legend-star"></i>恒星</span><span><i class="legend-planet"></i>行星</span><span><i class="legend-moon"></i>月球</span><span><i class="legend-sun"></i>太阳</span><span><i class="legend-deep"></i>深空</span></div>
+          <div class="zoom-controls" aria-label="星图缩放"><button id="zoom-out" type="button" aria-label="缩小" title="缩小">−</button><span id="zoom-label">100%</span><button id="zoom-in" type="button" aria-label="放大" title="放大">+</button></div>
+        </div>
+      </section>
+
+      <aside class="control-panel" aria-label="观测设置">
+        <section class="control-section time-section">
+          <div class="section-heading"><span class="section-index">01</span><h2>观测时间</h2></div>
+          <label class="field-label" for="datetime-input">本地日期与时间</label>
+          <div class="time-row"><input id="datetime-input" type="datetime-local" step="60"><button class="icon-button" id="now-button" type="button" title="同步系统当前时间" aria-label="同步系统当前时间">⟳</button></div>
+          <div class="playback" aria-label="时间播放控制">
+            <button id="play-button" class="play-button" type="button" aria-pressed="true"><span class="play-glyph" id="play-glyph">❚❚</span><span id="play-label">暂停</span></button>
+            <button id="reverse-button" class="step-button" type="button" title="反向推进" aria-label="反向推进">⇄</button>
+            <button id="slower-button" class="step-button" type="button" title="减速" aria-label="减速">−</button>
+            <button id="faster-button" class="step-button" type="button" title="加速" aria-label="加速">+</button>
+            <button id="sync-button" class="sync-button" type="button" title="同步到当前时间">同步</button>
+          </div>
+          <div class="rate-line"><span id="rate-label">1× 实时</span><span class="rate-state" id="mode-label">实时</span></div>
+          <div class="timezone-line"><span class="tiny-dot"></span><span id="timezone-label">使用设备时区</span><span class="utc-value" id="utc-value">UTC --:--</span></div>
+        </section>
+
+        <section class="control-section location-section">
+          <div class="section-heading"><span class="section-index">02</span><h2>观测地点</h2></div>
+          <div class="coordinate-grid">
+            <label><span class="field-label">纬度 / LAT</span><span class="input-with-unit"><input id="latitude-input" type="number" min="-90" max="90" step="0.0001" value="31.2304"><span>°</span></span></label>
+            <label><span class="field-label">经度 / LON</span><span class="input-with-unit"><input id="longitude-input" type="number" min="-180" max="180" step="0.0001" value="121.4737"><span>°</span></span></label>
+          </div>
+          <button class="location-button" id="locate-button" type="button"><span aria-hidden="true">⌖</span>读取设备位置</button>
+          <p class="permission-note" id="location-status">需要浏览器位置授权；坐标只在本机使用。</p>
+        </section>
+
+        <section class="control-section orientation-section">
+          <div class="section-heading"><span class="section-index">03</span><h2>方位与设备</h2></div>
+          <div class="orientation-control"><div class="orientation-values"><span>方位角</span><strong id="slider-heading">000° <small>北</small></strong></div><input id="heading-slider" type="range" min="0" max="359" value="0" aria-label="调整星图朝向"><div class="range-labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div></div>
+          <button class="sensor-button" id="sensor-button" type="button"><span class="sensor-icon" aria-hidden="true">◎</span><span><strong>陀螺仪同步</strong><small id="sensor-status">手动方位</small></span><span class="toggle-indicator" aria-hidden="true"></span></button>
+          <p class="permission-note">传感器需在安全来源下由你主动开启。浏览器不支持时可拖动星图或滑动方位条。</p>
+        </section>
+
+        <section class="object-section">
+          <div class="object-heading"><h2>天体位置</h2><span id="object-count">-- OBJECTS</span></div>
+          <div class="object-tabs" role="tablist" aria-label="天体分类">
+            <button type="button" role="tab" data-tab="solar" class="active" aria-selected="true">太阳系</button>
+            <button type="button" role="tab" data-tab="deep" aria-selected="false">深空</button>
+            <button type="button" role="tab" data-tab="star" aria-selected="false">恒星</button>
+          </div>
+          <div class="object-search">
+            <span class="search-glyph" aria-hidden="true">⌕</span>
+            <input id="object-search" type="search" placeholder="搜索名称，如 天狼星 / M31 / 木星" aria-label="搜索天体">
+          </div>
+          <div class="object-list" id="object-list" aria-live="polite"><div class="loading-row">正在载入星历 <span class="loading-pulse"></span></div></div>
+          <p class="object-note" id="object-note"></p>
+        </section>
+        <footer class="panel-footer"><span>坐标基准：地平坐标系</span><span>点击列表项定位</span></footer>
+      </aside>
+    </section>
+    <footer class="app-footer"><span>穹顶 · 一张属于此刻的天空</span><span>位置与时间不会离开此设备</span></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,25 @@
+#!/bin/sh
+# post-receive hook for the bare repo at /home/ubuntu/starmap.git
+#
+# Push-to-deploy: any push to `main` is checked out into the web root
+# /home/ubuntu/starmap that nginx serves as map.starst.site.
+#
+# Install with:
+#   install -m 755 deploy/post-receive /home/ubuntu/starmap.git/hooks/post-receive
+
+set -e
+
+TARGET="/home/ubuntu/starmap"
+BRANCH="main"
+REPO="/home/ubuntu/starmap.git"
+
+while read -r oldrev newrev refname; do
+    branch="$(printf '%s' "$refname" | sed 's#refs/heads/##')"
+    if [ "$refname" = "refs/heads/$BRANCH" ]; then
+        echo "→ deploying $BRANCH ($oldrev → $newrev) into $TARGET"
+        GIT_DIR="$REPO" GIT_WORK_TREE="$TARGET" git checkout -f "$BRANCH"
+        echo "→ deployed. HTTP cache for index.html/app.js/styles.css is disabled by nginx."
+    else
+        echo "→ ignoring push to $branch (only $BRANCH is deployed)"
+    fi
+done

@@ -1,0 +1,5 @@
+# 本地缓存与构建产物
+.cache/
+__pycache__/
+*.pyc
+.DS_Store
