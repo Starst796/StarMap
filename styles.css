@@ -57,8 +57,8 @@ h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 600; letter-spac
 .legend-toggle { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
 .legend-toggle:hover { color: var(--ink); }
 .legend-toggle[aria-pressed=false] { opacity: .38; }
-.legend i.legend-plane-ecliptic { width: 13px; height: 2px; border-radius: 1px; background: rgba(236,137,115,.95); }
-.legend i.legend-plane-galactic { width: 13px; height: 2px; border-radius: 1px; background: rgba(150,172,214,.95); }
+.legend i.legend-plane-ecliptic { width: 13px; height: 2px; border-radius: 1px; background: rgb(242,150,122); }
+.legend i.legend-plane-galactic { width: 13px; height: 2px; border-radius: 1px; background: rgb(168,194,244); }
 .legend-star { background: #d5e6d3; box-shadow: 0 0 5px #c4ddca; }
 .legend-planet { background: var(--mint); }
 .legend-moon { background: #c6cfd0; }

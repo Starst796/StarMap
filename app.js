@@ -514,8 +514,8 @@
     ctx.restore();
 
     // Ecliptic and galactic plane centre lines, clipped to the horizon circle.
-    if (state.showEcliptic) drawPlane(eclipticPlane, radius, cx, cy, headingRad, 'rgba(236,137,115,.62)', [7, 5]);
-    if (state.showGalactic) drawPlane(galacticPlane, radius, cx, cy, headingRad, 'rgba(150,172,214,.6)', [2, 4]);
+    if (state.showEcliptic) drawPlane(eclipticPlane, radius, cx, cy, headingRad, 'rgba(242,150,122,.88)', [7, 5]);
+    if (state.showGalactic) drawPlane(galacticPlane, radius, cx, cy, headingRad, 'rgba(168,194,244,.9)', [2, 4]);
 
     hits = [];
 
