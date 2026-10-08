@@ -79,7 +79,6 @@
   const dVz = new Float64Array(ND);
   const dAz = new Float32Array(ND);
   const dAlt = new Float32Array(ND);
-  const dMag = new Float32Array(ND);
 
   for (let i = 0; i < ND; i += 1) {
     const obj = deep[i];
@@ -89,7 +88,6 @@
     dVx[i] = cd * Math.cos(raRad);
     dVy[i] = cd * Math.sin(raRad);
     dVz[i] = Math.sin(decRad);
-    dMag[i] = Number.isFinite(obj.mag) ? obj.mag : 12;
     dAlt[i] = -90;
   }
 
