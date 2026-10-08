@@ -9,6 +9,7 @@
 - **仰视视角**：星图按「抬头望天」的方向绘制，东方在左、西方在右，符合地平坐标系下的直观印象。
 - **天体位置分栏**：太阳系 / 深空 / 恒星三个分页，支持名称搜索（中文名、西名、梅西耶编号），点击任一行即旋转星图定位该天体。
 - **星图内不显示名称**：天体会以点/符号呈现，点击画布上的天体即在右下角弹出详情卡（方位、高度、视星等、赤道坐标）。点击画布不会滚动或跳转天体列表；触摸设备的点选容差会自动放宽，所有已绘制的恒星都可点选。
+- **黄道面与银道面**：默认叠加黄道（珊瑚色长虚线）与银道（浅蓝点线）两条大圆参考线，按地平线裁剪，可在星图下方图例处随时开关。黄道线始终穿过太阳位置，银道线为银河中心线。
 - **显示限星等滑块**：拖动即可只显示亮于指定星等的恒星与深空天体（范围 −1.5 ~ 12 等，覆盖全部 5044 颗恒星与 110 个梅西耶天体），快速降低星图密度；搜索不受限制，仍可找到任意暗星。深空列表按星等由亮到暗排列。
 
 ## 静态使用
@@ -32,7 +33,7 @@ python3 app.py
 
 ## 星表数据
 
-`catalog.js` 由 `tools/build_catalog.py` 生成，数据来源为 [d3-celestial](https://github.com/ofrohn/d3-celestial) 的亮星星表（视星等 ≤ 6）与梅西耶星表，脚本内部附有中文名称对照（星座、亮星、梅西耶天体）。
+`catalog.js` 由 `tools/build_catalog.py` 生成，数据来源为 [d3-celestial](https://github.com/ofrohn/d3-celestial) 的亮星星表（视星等 ≤ 6）与梅西耶星表，脚本内部附有中文名称对照（星座、亮星、梅西耶天体），并额外生成黄道面与银道面的大圆采样点（J2000 赤道坐标，每 2° 一个点）。
 
 ```sh
 mkdir -p .cache
@@ -76,3 +77,5 @@ git add -A && git commit -m "..." && git push deploy main
 ```sh
 ssh ubuntu@starst.site 'sudo cp /home/ubuntu/starmap/map.starst.site.nginx.conf /etc/nginx/sites-available/map.starst.site && sudo nginx -t && sudo systemctl reload nginx'
 ```
+
+> 静态资源均使用 `Cache-Control: no-cache`（每次重新校验），避免发布新版本后客户端继续使用旧文件。
