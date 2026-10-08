@@ -112,6 +112,7 @@
     direction: 1,
     tab: 'solar',
     query: '',
+    maxMag: 6.5,
     selected: null,
     invalid: true
   };
@@ -412,12 +413,13 @@
       ctx.lineWidth = 1;
       ctx.arc(point.x, point.y, 2.6, 0, Math.PI * 2);
       ctx.stroke();
-      hits.push({ kind: 'deep', index: i, x: point.x, y: point.y });
+      hits.push({ kind: 'deep', index: i, x: point.x, y: point.y, weight: 2 });
     }
 
+    const maxMag = state.maxMag;
     for (let i = 0; i < NS; i += 1) {
       const alt = sAlt[i];
-      if (alt < 0) continue;
+      if (alt < 0 || sMag[i] > maxMag) continue;
       const point = project(sAz[i], alt, radius, cx, cy, headingRad);
       const size = sSize[i];
       ctx.fillStyle = sColor[i];
@@ -433,7 +435,8 @@
         ctx.fill();
         ctx.shadowBlur = 0;
       }
-      if (size >= 2.1) hits.push({ kind: 'star', index: i, x: point.x, y: point.y });
+      // Every drawn star is tappable; brighter ones get a small priority bonus.
+      hits.push({ kind: 'star', index: i, x: point.x, y: point.y, weight: Math.min(size, 3) });
     }
 
     SOLAR.forEach((body, index) => {
@@ -453,7 +456,7 @@
         ctx.arc(point.x, point.y, body.size + 5, 0, Math.PI * 2);
         ctx.stroke();
       }
-      hits.push({ kind: 'solar', key: body.key, x: point.x, y: point.y });
+      hits.push({ kind: 'solar', key: body.key, x: point.x, y: point.y, weight: Math.min(body.size, 4) });
     });
 
     if (state.selected) {
@@ -616,7 +619,11 @@
     }
     const list = [];
     for (let i = 0; i < NS; i += 1) {
-      if (query && !`${sLabel[i]} ${sAlias[i]}`.toLowerCase().includes(query)) continue;
+      if (query) {
+        if (!`${sLabel[i]} ${sAlias[i]}`.toLowerCase().includes(query)) continue;
+      } else if (sMag[i] > state.maxMag) {
+        continue;
+      }
       list.push({ kind: 'star', index: i, id: selectionId('star', i), label: sLabel[i], sub: `视星等 ${sMag[i].toFixed(2)}`, symbol: '✦', color: '#d6e6d7' });
       if (list.length >= 400) break;
     }
@@ -624,8 +631,16 @@
   }
 
   function updateObjectCount(count) {
-    const total = state.tab === 'solar' ? SOLAR.length : (state.tab === 'deep' ? ND : NS);
+    let total = SOLAR.length;
+    if (state.tab === 'deep') total = ND;
+    if (state.tab === 'star') total = state.query ? NS : starCountWithinLimit();
     $('#object-count').textContent = state.query ? `${count} / ${total} 匹配` : `${total} ${state.tab === 'solar' ? 'BODIES' : 'OBJECTS'}`;
+  }
+
+  function starCountWithinLimit() {
+    let count = 0;
+    for (let i = 0; i < NS; i += 1) if (sMag[i] <= state.maxMag) count += 1;
+    return count;
   }
 
   function renderList() {
@@ -832,6 +847,14 @@
     renderList();
   });
 
+  const magSlider = $('#mag-slider');
+  magSlider.addEventListener('input', () => {
+    state.maxMag = Number(magSlider.value);
+    $('#mag-value').textContent = state.maxMag.toFixed(1);
+    if (state.tab === 'star') renderList();
+    invalidate(false);
+  });
+
   let dragStart = null;
   let dragMoved = false;
   canvas.addEventListener('pointerdown', (event) => {
@@ -875,12 +898,17 @@
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+    // Fingers are imprecise: widen the catch radius for touch input.
+    const limit = event.pointerType === 'touch' ? 34 : 22;
     let best = null;
-    let bestDistance = 20;
+    let bestScore = Infinity;
     hits.forEach((hit) => {
       const distance = Math.hypot(hit.x - x, hit.y - y);
-      if (distance < bestDistance) {
-        bestDistance = distance;
+      if (distance > limit) return;
+      // Larger/brighter objects win near-ties so crowded fields stay predictable.
+      const score = distance - hit.weight;
+      if (score < bestScore) {
+        bestScore = score;
         best = hit;
       }
     });
@@ -890,10 +918,6 @@
     }
     if (best.kind === 'solar') select({ kind: 'solar', key: best.key, id: selectionId('solar', best.key) }, false);
     else select({ kind: best.kind, index: best.index, id: selectionId(best.kind, best.index) }, false);
-    if (state.selected) {
-      const match = rowRecords.find((record) => record.entry.id === state.selected.id);
-      if (match) match.el.scrollIntoView({ block: 'nearest' });
-    }
   }
 
   window.addEventListener('resize', () => invalidate(false));

@@ -116,7 +116,9 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border: 2px sol
 .object-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .object-heading > span { color: var(--muted); font: 9px var(--mono); }
 .object-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 9px; }
-.object-tabs button { padding: 7px 2px; border: 1px solid var(--line); background: rgba(220,230,220,.035); color: var(--soft); font-size: 10px; cursor: pointer; }
+.magnitude-control { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px; align-items: center; gap: 9px; margin-bottom: 11px; color: var(--muted); font-size: 9px; }
+.magnitude-control input[type=range] { height: 3px; }
+.magnitude-value { text-align: right; color: var(--mint); font: 10px var(--mono); }.object-tabs button { padding: 7px 2px; border: 1px solid var(--line); background: rgba(220,230,220,.035); color: var(--soft); font-size: 10px; cursor: pointer; }
 .object-tabs button:hover { color: var(--mint); border-color: rgba(169,213,189,.34); }
 .object-tabs button.active { border-color: rgba(169,213,189,.5); background: rgba(169,213,189,.12); color: var(--mint); }
 .object-search { display: flex; align-items: center; gap: 8px; height: 34px; margin-bottom: 10px; padding: 0 9px; border: 1px solid rgba(207,222,210,.16); background: rgba(8,16,18,.28); }
@@ -124,8 +126,7 @@ input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border: 2px sol
 .object-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: none; color: var(--ink); font-size: 11px; }
 .object-search input::placeholder { color: #65736f; }
 .object-list { display: flex; flex-direction: column; max-height: 42vh; overflow-y: auto; scrollbar-width: thin; }
-.object-row { width: 100%; min-height: 39px; display: grid; grid-template-columns: minmax(0,1fr) 66px 65px; align-items: center; gap: 5px; padding: 0; border: 0; border-top: 1px solid rgba(200,216,204,.08); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.object-row:hover { background: rgba(169,213,189,.06); }
+.object-row { width: 100%; min-height: 39px; display: grid; grid-template-columns: minmax(0,1fr) 66px 65px; align-items: center; gap: 5px; padding: 0; border: 0; border-top: 1px solid rgba(200,216,204,.08); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }.object-row:hover { background: rgba(169,213,189,.06); }
 .object-row.selected { background: rgba(169,213,189,.14); box-shadow: inset 2px 0 0 var(--mint); }
 .object-name { min-width: 0; display: flex; align-items: center; gap: 8px; color: #d5dcd5; font-size: 10px; }
 .object-symbol { display: grid; place-items: center; width: 17px; height: 17px; flex: 0 0 auto; color: var(--mint); font-size: 11px; }
