@@ -74,6 +74,7 @@
   // --------------------------------------------------------- deep sky data ---
   const deep = CATALOG.deepSky || [];
   const ND = deep.length;
+  const deepOrder = Array.from(deep.keys()).sort((a, b) => deep[a].mag - deep[b].mag);
   const dVx = new Float64Array(ND);
   const dVy = new Float64Array(ND);
   const dVz = new Float64Array(ND);
@@ -609,7 +610,7 @@
     }
     if (state.tab === 'deep') {
       const list = [];
-      for (let i = 0; i < ND; i += 1) {
+      for (const i of deepOrder) {
         const obj = deep[i];
         if (query) {
           if (!`${obj.label} ${obj.en || ''} ${obj.n}`.toLowerCase().includes(query)) continue;
