@@ -845,7 +845,11 @@
       heading
     };
     dragMoved = false;
-    canvas.setPointerCapture(event.pointerId);
+    try {
+      canvas.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // Synthetic pointers (tests, some assistive tools) have no active capture.
+    }
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!dragStart || sensorEnabled) return;
@@ -895,6 +899,7 @@
   }
 
   window.addEventListener('resize', () => invalidate(false));
+  document.addEventListener('visibilitychange', () => invalidate(true));
   if ('ResizeObserver' in window) {
     new ResizeObserver(() => invalidate(false)).observe(stage);
   }
