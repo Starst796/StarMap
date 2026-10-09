@@ -1241,7 +1241,7 @@
   $('#sensor-button').addEventListener('click', toggleSensor);
   $('#detail-close').addEventListener('click', clearSelection);
   $('#zoom-out').addEventListener('click', () => { zoom = Math.max(0.8, zoom - 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
-  $('#zoom-in').addEventListener('click', () => { zoom = Math.min(2.0, zoom + 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
+  $('#zoom-in').addEventListener('click', () => { zoom = Math.min(4.0, zoom + 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
 
   document.querySelectorAll('.object-tabs [data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -1350,7 +1350,7 @@
   canvas.addEventListener('pointercancel', () => { dragStart = null; dragMoved = false; });
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
-    zoom = Math.min(1.35, Math.max(0.8, zoom - Math.sign(event.deltaY) * 0.06));
+    zoom = Math.min(4.0, Math.max(0.8, zoom - Math.sign(event.deltaY) * 0.06));
     $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`;
     invalidate(false);
   }, { passive: false });
