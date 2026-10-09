@@ -159,6 +159,8 @@
   let sensorEnabled = false;
   let sensorHandler = null;
   const MIN_VIEW_ALT = -15;
+  const BELOW_HORIZON_ALPHA = 0.34;
+  const GROUND_TINT = 'rgba(7,14,16,.6)';
   let viewMode = 'zenith';
   let viewAz = 0;
   let viewAlt = 90;
@@ -520,6 +522,7 @@
    */
   function drawFreeGrid(radius, cx, cy) {
     ctx.save();
+    fillBelowHorizon(radius, cx, cy);
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(190,214,194,.1)';
@@ -554,19 +557,23 @@
     for (const altitude of [30, 60]) {
       strokeCurve((t) => [t * 360, altitude], 180, 'rgba(190,214,194,.16)', [3, 7], 1);
     }
+    for (const altitude of [-30, -60]) {
+      strokeCurve((t) => [t * 360, altitude], 180, 'rgba(150,178,162,.13)', [3, 7], 1);
+    }
     for (let azimuth = 0; azimuth < 360; azimuth += 30) {
       const major = azimuth % 90 === 0;
-      strokeCurve((t) => [azimuth, t * 90], 45, major ? 'rgba(190,214,194,.2)' : 'rgba(190,214,194,.08)', [], 1);
+      strokeCurve((t) => [azimuth, 90 - t * 180], 90, major ? 'rgba(190,214,194,.2)' : 'rgba(190,214,194,.08)', [], 1);
     }
     strokeCurve((t) => [t * 360, 0], 180, 'rgba(190,214,194,.42)', [], 1.3);
 
-    ctx.fillStyle = 'rgba(205,222,207,.46)';
     ctx.font = '9px "DM Mono", monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-    for (const altitude of [30, 60]) {
+    for (const altitude of [60, 30, -30, -60]) {
       const label = project(viewAz, altitude, radius, cx, cy);
-      if (label.theta <= 90.001) ctx.fillText(`${altitude}°`, label.x + 7, label.y - 4);
+      if (label.theta > 90.001) continue;
+      ctx.fillStyle = altitude >= 0 ? 'rgba(205,222,207,.46)' : 'rgba(178,199,186,.34)';
+      ctx.fillText(`${altitude}°`, label.x + 7, label.y - 4);
     }
 
     const cardinalLabels = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
@@ -585,21 +592,69 @@
       ctx.fillText(cardinalLabels[azimuth], point.x + ox * 15, point.y + oy * 15);
     }
 
+    const marker = (x, y, color, label, labelAbove) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - 5, y);
+      ctx.lineTo(x + 5, y);
+      ctx.moveTo(x, y - 5);
+      ctx.lineTo(x, y + 5);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.font = '9px "DM Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = labelAbove ? 'bottom' : 'top';
+      ctx.fillText(label, x, y + (labelAbove ? -8 : 8));
+    };
     const zenith = project(viewAz, 90, radius, cx, cy);
-    ctx.strokeStyle = 'rgba(169,213,189,.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(zenith.x - 5, zenith.y);
-    ctx.lineTo(zenith.x + 5, zenith.y);
-    ctx.moveTo(zenith.x, zenith.y - 5);
-    ctx.lineTo(zenith.x, zenith.y + 5);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(205,222,207,.5)';
-    ctx.font = '9px "DM Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('天顶', zenith.x, zenith.y - 8);
+    marker(zenith.x, zenith.y, 'rgba(205,222,207,.5)', '天顶', true);
+    const nadir = project(viewAz, -90, radius, cx, cy);
+    if (nadir.theta <= 90.001) marker(nadir.x, nadir.y, 'rgba(178,199,186,.34)', '天底', false);
     ctx.restore();
+  }
+
+  /**
+   * Tint the region below the horizon inside the visible dome. The horizon
+   * always meets the view circle at its left and right extremes, so the ground
+   * is bounded by the horizon arc plus the lower half of the view circle.
+   */
+  function fillBelowHorizon(radius, cx, cy) {
+    const samples = 180;
+    const points = [];
+    let all = true;
+    let any = false;
+    for (let i = 0; i < samples; i += 1) {
+      const point = project(i * (360 / samples), 0, radius, cx, cy);
+      points.push(point);
+      const inside = point.theta <= 90.001;
+      if (inside) any = true;
+      else all = false;
+    }
+    ctx.fillStyle = GROUND_TINT;
+    if (all || !any) {
+      if (viewAlt >= 0) return;
+      // The whole dome lies below the horizon.
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    const start = points.findIndex((point, i) => point.theta <= 90.001 && points[(i - 1 + samples) % samples].theta > 90.001);
+    let run = [];
+    for (let k = 0; k < samples && points[(start + k) % samples].theta <= 90.001; k += 1) run.push(points[(start + k) % samples]);
+    if (run[0].x > run[run.length - 1].x) run = run.slice().reverse();
+
+    ctx.beginPath();
+    ctx.moveTo(run[0].x, run[0].y);
+    for (let i = 1; i < run.length; i += 1) ctx.lineTo(run[i].x, run[i].y);
+    const steps = 60;
+    for (let i = 0; i <= steps; i += 1) {
+      const psi = 2 * Math.PI - (Math.PI * i) / steps;
+      ctx.lineTo(cx + Math.cos(psi) * radius, cy - Math.sin(psi) * radius);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   function draw() {
@@ -668,26 +723,35 @@
     hits = [];
 
     const maxMag = state.maxMag;
+    // Free mode also draws the sky below the horizon, dimmed as a ground layer.
+    const freeView = viewMode === 'free';
     for (let i = 0; i < ND; i += 1) {
       const alt = dAlt[i];
-      if (alt < 0 || deep[i].mag > maxMag) continue;
+      if (deep[i].mag > maxMag) continue;
+      const below = alt < 0;
+      if (below && !freeView) continue;
       const point = project(dAz[i], alt, radius, cx, cy);
       if (point.theta > 90.05) continue;
+      if (below) ctx.globalAlpha = BELOW_HORIZON_ALPHA;
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(237,191,118,.62)';
       ctx.lineWidth = 1;
       ctx.arc(point.x, point.y, 2.6, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.globalAlpha = 1;
       hits.push({ kind: 'deep', index: i, x: point.x, y: point.y, weight: 2 });
     }
 
     for (let i = 0; i < NS; i += 1) {
       const alt = sAlt[i];
-      if (alt < 0 || sMag[i] > maxMag) continue;
+      if (sMag[i] > maxMag) continue;
+      const below = alt < 0;
+      if (below && !freeView) continue;
       const point = project(sAz[i], alt, radius, cx, cy);
       if (point.theta > 90.05) continue;
       const size = sSize[i];
       ctx.fillStyle = sColor[i];
+      if (below) ctx.globalAlpha = BELOW_HORIZON_ALPHA;
       if (size <= 1.5) {
         ctx.fillRect(point.x - 0.6, point.y - 0.6, 1.2, 1.2);
       } else {
@@ -700,15 +764,19 @@
         ctx.fill();
         ctx.shadowBlur = 0;
       }
+      ctx.globalAlpha = 1;
       // Every drawn star is tappable; brighter ones get a small priority bonus.
       hits.push({ kind: 'star', index: i, x: point.x, y: point.y, weight: Math.min(size, 3) });
     }
 
     SOLAR.forEach((body, index) => {
       const found = solarPos[index];
-      if (!found || found.altitude < 0) return;
+      if (!found) return;
+      const below = found.altitude < 0;
+      if (below && !freeView) return;
       const point = project(found.azimuth, found.altitude, radius, cx, cy);
       if (point.theta > 90.05) return;
+      if (below) ctx.globalAlpha = BELOW_HORIZON_ALPHA;
       ctx.beginPath();
       ctx.fillStyle = body.color;
       ctx.shadowColor = body.color;
@@ -722,6 +790,7 @@
         ctx.arc(point.x, point.y, body.size + 5, 0, Math.PI * 2);
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
       hits.push({ kind: 'solar', key: body.key, x: point.x, y: point.y, weight: Math.min(body.size, 4) });
     });
 
@@ -748,7 +817,8 @@
 
   function selectedPoint(selection, radius, cx, cy) {
     const point = positionOf(selection);
-    if (!point.known || point.alt < 0) return null;
+    if (!point.known) return null;
+    if (point.alt < 0 && viewMode !== 'free') return null;
     const projected = project(point.az, point.alt, radius, cx, cy);
     return projected.theta > 90.05 ? null : projected;
   }
