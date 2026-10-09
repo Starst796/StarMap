@@ -1090,7 +1090,6 @@
     $('#mode-zenith').setAttribute('aria-pressed', free ? 'false' : 'true');
     $('#mode-free').setAttribute('aria-pressed', free ? 'true' : 'false');
     stage.classList.toggle('free-view', free);
-    $('#canvas-hint-text').textContent = free ? '拖动移动视野 · 点击天体查看详情' : '拖动旋转 · 点击天体查看详情';
     $('#view-mode-note').textContent = free ? '地平坐标 · 自由视角（天顶在上）' : '地平坐标 · 仰视（东在左）';
     updateViewReadout();
   }
@@ -1242,7 +1241,7 @@
   $('#sensor-button').addEventListener('click', toggleSensor);
   $('#detail-close').addEventListener('click', clearSelection);
   $('#zoom-out').addEventListener('click', () => { zoom = Math.max(0.8, zoom - 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
-  $('#zoom-in').addEventListener('click', () => { zoom = Math.min(1.35, zoom + 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
+  $('#zoom-in').addEventListener('click', () => { zoom = Math.min(2.0, zoom + 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
 
   document.querySelectorAll('.object-tabs [data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
