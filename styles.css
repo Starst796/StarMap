@@ -100,6 +100,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .location-button span { font-size: 15px; }
 .permission-note { margin: 8px 0 0; color: #71817e; font-size: 9px; line-height: 1.6; }
 .orientation-section { padding-bottom: 17px; margin-bottom: 16px; }
+.view-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 13px; }
+.view-mode button { height: 32px; border: 1px solid rgba(207,222,210,.16); background: rgba(220,230,220,.04); color: var(--soft); font: 11px var(--sans); cursor: pointer; }
+.view-mode button:hover { border-color: rgba(169,213,189,.4); color: var(--mint); }
+.view-mode button[aria-pressed=true] { border-color: rgba(169,213,189,.4); background: rgba(169,213,189,.12); color: var(--mint); }
+.orientation-altitude { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; color: var(--muted); font-size: 10px; }
+.orientation-altitude strong { color: var(--ink); font: 11px var(--mono); }
+.sky-stage.free-view .zenith-label { display: none; }
 .orientation-control { margin: 0 0 13px; }
 .orientation-values { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; color: var(--muted); font-size: 10px; }
 .orientation-values strong { color: var(--ink); font: 11px var(--mono); }

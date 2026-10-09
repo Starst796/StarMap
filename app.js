@@ -158,6 +158,12 @@
   let zoom = 1;
   let sensorEnabled = false;
   let sensorHandler = null;
+  const MIN_VIEW_ALT = -15;
+  let viewMode = 'zenith';
+  let viewAz = 0;
+  let viewAlt = 90;
+  // Cached per-frame camera basis reused by project(); free mode only.
+  const viewFrame = { zenith: true, headingRad: 0, Fx: 0, Fy: 0, Fz: 1, Ux: 0, Uy: 0, Uz: 1, Rx: 1, Ry: 0 };
   let solarPos = [];
   let hits = [];
   let rowRecords = [];
@@ -223,6 +229,35 @@
   function invalidate(compute) {
     if (compute) state.invalid = true;
     needDraw = true;
+  }
+
+  /**
+   * Refresh the projection basis. Zenith mode keeps the classic radial dome
+   * (centre pinned to the zenith); free mode builds a first-person camera frame
+   * pointing at (viewAz, viewAlt) with the zenith as screen up.
+   */
+  function updateViewFrame() {
+    if (viewMode === 'zenith') {
+      viewFrame.zenith = true;
+      viewFrame.headingRad = heading * DEG;
+      return;
+    }
+    viewFrame.zenith = false;
+    const a = viewAz * DEG;
+    const v = viewAlt * DEG;
+    const cosA = Math.cos(a);
+    const sinA = Math.sin(a);
+    const cosV = Math.cos(v);
+    const sinV = Math.sin(v);
+    // Forward = view centre, up = toward the zenith, right = forward x up.
+    viewFrame.Fx = cosV * sinA;
+    viewFrame.Fy = cosV * cosA;
+    viewFrame.Fz = sinV;
+    viewFrame.Ux = -sinV * sinA;
+    viewFrame.Uy = -sinV * cosA;
+    viewFrame.Uz = cosV;
+    viewFrame.Rx = cosA;
+    viewFrame.Ry = -sinA;
   }
 
   // ------------------------------------------------------------------ time ---
@@ -409,14 +444,13 @@
   }
 
   /** Draw a great-circle reference line, clipping it at the horizon (r = radius). */
-  function drawPlane(plane, radius, cx, cy, headingRad, color, dash) {
+  function drawPlane(plane, radius, cx, cy, color, dash) {
     if (!plane.n || plane.n > PLANE_MAX) return;
     for (let i = 0; i < plane.n; i += 1) {
-      const r = radius * (90 - plane.alt[i]) / 90;
-      const angle = plane.az[i] * DEG - headingRad;
-      planeX[i] = cx - Math.sin(angle) * r;
-      planeY[i] = cy - Math.cos(angle) * r;
-      planeInside[i] = r <= radius ? 1 : 0;
+      const point = project(plane.az[i], plane.alt[i], radius, cx, cy);
+      planeX[i] = point.x;
+      planeY[i] = point.y;
+      planeInside[i] = point.theta <= 90.02 ? 1 : 0;
     }
     ctx.save();
     ctx.strokeStyle = color;
@@ -452,11 +486,120 @@
     ctx.restore();
   }
 
-  function project(az, alt, radius, cx, cy, headingRad) {
-    const r = radius * (90 - alt) / 90;
-    const angle = az * DEG - headingRad;
-    // Looking-up dome view: east appears on the left, west on the right.
-    return { x: cx - Math.sin(angle) * r, y: cy - Math.cos(angle) * r };
+  /**
+   * Project a horizontal coordinate to the canvas. `theta` is the angular
+   * distance from the view centre (>= 90 means "behind"/off the visible dome).
+   */
+  function project(az, alt, radius, cx, cy) {
+    if (viewFrame.zenith) {
+      const r = radius * (90 - alt) / 90;
+      const angle = az * DEG - viewFrame.headingRad;
+      // Looking-up dome view: east appears on the left, west on the right.
+      return { x: cx - Math.sin(angle) * r, y: cy - Math.cos(angle) * r, theta: 90 - alt };
+    }
+    const a = az * DEG;
+    const cAlt = Math.cos(alt * DEG);
+    const e = cAlt * Math.sin(a);
+    const n = cAlt * Math.cos(a);
+    const u = Math.sin(alt * DEG);
+    const forward = e * viewFrame.Fx + n * viewFrame.Fy + u * viewFrame.Fz;
+    const up = e * viewFrame.Ux + n * viewFrame.Uy + u * viewFrame.Uz;
+    const right = e * viewFrame.Rx + n * viewFrame.Ry;
+    const hyp = Math.hypot(right, up);
+    const theta = Math.acos(forward > 1 ? 1 : (forward < -1 ? -1 : forward));
+    const r = radius * theta / (Math.PI / 2);
+    const sx = hyp > 1e-9 ? right / hyp : 0;
+    const sy = hyp > 1e-9 ? up / hyp : 1;
+    return { x: cx + sx * r, y: cy - sy * r, theta: theta * RAD2DEG };
+  }
+
+  /**
+   * Free-look grid. The horizon is no longer the outer circle, so the altitude
+   * circles, azimuth meridians and horizon are sampled through the projection
+   * and clipped to the visible hemisphere around the view centre.
+   */
+  function drawFreeGrid(radius, cx, cy) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(190,214,194,.1)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 8]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const strokeCurve = (pointAt, count, style, dash, width) => {
+      ctx.beginPath();
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash);
+      let started = false;
+      for (let i = 0; i <= count; i += 1) {
+        const coord = pointAt(i / count);
+        const point = project(coord[0], coord[1], radius, cx, cy);
+        if (point.theta <= 90.001) {
+          if (started) ctx.lineTo(point.x, point.y);
+          else {
+            ctx.moveTo(point.x, point.y);
+            started = true;
+          }
+        } else {
+          started = false;
+        }
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    for (const altitude of [30, 60]) {
+      strokeCurve((t) => [t * 360, altitude], 180, 'rgba(190,214,194,.16)', [3, 7], 1);
+    }
+    for (let azimuth = 0; azimuth < 360; azimuth += 30) {
+      const major = azimuth % 90 === 0;
+      strokeCurve((t) => [azimuth, t * 90], 45, major ? 'rgba(190,214,194,.2)' : 'rgba(190,214,194,.08)', [], 1);
+    }
+    strokeCurve((t) => [t * 360, 0], 180, 'rgba(190,214,194,.42)', [], 1.3);
+
+    ctx.fillStyle = 'rgba(205,222,207,.46)';
+    ctx.font = '9px "DM Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    for (const altitude of [30, 60]) {
+      const label = project(viewAz, altitude, radius, cx, cy);
+      if (label.theta <= 90.001) ctx.fillText(`${altitude}°`, label.x + 7, label.y - 4);
+    }
+
+    const cardinalLabels = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+    ctx.font = '10px "DM Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const azimuth of [0, 90, 180, 270]) {
+      const point = project(azimuth, 0, radius, cx, cy);
+      if (point.theta > 90.001) continue;
+      const dx = point.x - cx;
+      const dy = point.y - cy;
+      const len = Math.hypot(dx, dy);
+      const ox = len > 6 ? dx / len : 0;
+      const oy = len > 6 ? dy / len : -1;
+      ctx.fillStyle = 'rgba(222,234,222,.82)';
+      ctx.fillText(cardinalLabels[azimuth], point.x + ox * 15, point.y + oy * 15);
+    }
+
+    const zenith = project(viewAz, 90, radius, cx, cy);
+    ctx.strokeStyle = 'rgba(169,213,189,.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(zenith.x - 5, zenith.y);
+    ctx.lineTo(zenith.x + 5, zenith.y);
+    ctx.moveTo(zenith.x, zenith.y - 5);
+    ctx.lineTo(zenith.x, zenith.y + 5);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(205,222,207,.5)';
+    ctx.font = '9px "DM Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('天顶', zenith.x, zenith.y - 8);
+    ctx.restore();
   }
 
   function draw() {
@@ -475,47 +618,52 @@
     const cx = rect.width / 2;
     const cy = rect.height / 2;
     const radius = Math.min(rect.width * 0.44, rect.height * 0.43) * zoom;
-    const headingRad = heading * DEG;
+    updateViewFrame();
 
-    ctx.save();
-    ctx.translate(cx, cy);
-    for (let altitude = 0; altitude <= 60; altitude += 30) {
-      const r = radius * (90 - altitude) / 90;
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.strokeStyle = altitude === 0 ? 'rgba(190,214,194,.38)' : 'rgba(190,214,194,.16)';
-      ctx.lineWidth = altitude === 0 ? 1.2 : 1;
-      ctx.setLineDash(altitude === 0 ? [] : [3, 7]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (altitude > 0) {
-        ctx.fillStyle = 'rgba(205,222,207,.46)';
-        ctx.font = '9px "DM Mono", monospace';
-        ctx.fillText(`${altitude}°`, 7, -r - 4);
+    if (viewMode === 'zenith') {
+      const headingRad = heading * DEG;
+      ctx.save();
+      ctx.translate(cx, cy);
+      for (let altitude = 0; altitude <= 60; altitude += 30) {
+        const r = radius * (90 - altitude) / 90;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.strokeStyle = altitude === 0 ? 'rgba(190,214,194,.38)' : 'rgba(190,214,194,.16)';
+        ctx.lineWidth = altitude === 0 ? 1.2 : 1;
+        ctx.setLineDash(altitude === 0 ? [] : [3, 7]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (altitude > 0) {
+          ctx.fillStyle = 'rgba(205,222,207,.46)';
+          ctx.font = '9px "DM Mono", monospace';
+          ctx.fillText(`${altitude}°`, 7, -r - 4);
+        }
       }
+      for (let azimuth = 0; azimuth < 360; azimuth += 30) {
+        const angle = azimuth * DEG - headingRad;
+        const major = azimuth % 90 === 0;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-Math.sin(angle) * radius, -Math.cos(angle) * radius);
+        ctx.strokeStyle = major ? 'rgba(190,214,194,.2)' : 'rgba(190,214,194,.08)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        const labelRadius = radius + 17;
+        ctx.fillStyle = major ? 'rgba(222,234,222,.82)' : 'rgba(168,185,174,.58)';
+        ctx.font = `${major ? '10px' : '8px'} "DM Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const labels = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
+        ctx.fillText(labels[azimuth] || `${azimuth}°`, -Math.sin(angle) * labelRadius, -Math.cos(angle) * labelRadius);
+      }
+      ctx.restore();
+    } else {
+      drawFreeGrid(radius, cx, cy);
     }
-    for (let azimuth = 0; azimuth < 360; azimuth += 30) {
-      const angle = azimuth * DEG - headingRad;
-      const major = azimuth % 90 === 0;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(-Math.sin(angle) * radius, -Math.cos(angle) * radius);
-      ctx.strokeStyle = major ? 'rgba(190,214,194,.2)' : 'rgba(190,214,194,.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      const labelRadius = radius + 17;
-      ctx.fillStyle = major ? 'rgba(222,234,222,.82)' : 'rgba(168,185,174,.58)';
-      ctx.font = `${major ? '10px' : '8px'} "DM Mono", monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const labels = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
-      ctx.fillText(labels[azimuth] || `${azimuth}°`, -Math.sin(angle) * labelRadius, -Math.cos(angle) * labelRadius);
-    }
-    ctx.restore();
 
-    // Ecliptic and galactic plane centre lines, clipped to the horizon circle.
-    if (state.showEcliptic) drawPlane(eclipticPlane, radius, cx, cy, headingRad, 'rgba(242,150,122,.88)', [7, 5]);
-    if (state.showGalactic) drawPlane(galacticPlane, radius, cx, cy, headingRad, 'rgba(168,194,244,.9)', [2, 4]);
+    // Ecliptic and galactic plane centre lines, clipped to the view circle.
+    if (state.showEcliptic) drawPlane(eclipticPlane, radius, cx, cy, 'rgba(242,150,122,.88)', [7, 5]);
+    if (state.showGalactic) drawPlane(galacticPlane, radius, cx, cy, 'rgba(168,194,244,.9)', [2, 4]);
 
     hits = [];
 
@@ -523,7 +671,8 @@
     for (let i = 0; i < ND; i += 1) {
       const alt = dAlt[i];
       if (alt < 0 || deep[i].mag > maxMag) continue;
-      const point = project(dAz[i], alt, radius, cx, cy, headingRad);
+      const point = project(dAz[i], alt, radius, cx, cy);
+      if (point.theta > 90.05) continue;
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(237,191,118,.62)';
       ctx.lineWidth = 1;
@@ -535,7 +684,8 @@
     for (let i = 0; i < NS; i += 1) {
       const alt = sAlt[i];
       if (alt < 0 || sMag[i] > maxMag) continue;
-      const point = project(sAz[i], alt, radius, cx, cy, headingRad);
+      const point = project(sAz[i], alt, radius, cx, cy);
+      if (point.theta > 90.05) continue;
       const size = sSize[i];
       ctx.fillStyle = sColor[i];
       if (size <= 1.5) {
@@ -557,7 +707,8 @@
     SOLAR.forEach((body, index) => {
       const found = solarPos[index];
       if (!found || found.altitude < 0) return;
-      const point = project(found.azimuth, found.altitude, radius, cx, cy, headingRad);
+      const point = project(found.azimuth, found.altitude, radius, cx, cy);
+      if (point.theta > 90.05) return;
       ctx.beginPath();
       ctx.fillStyle = body.color;
       ctx.shadowColor = body.color;
@@ -575,7 +726,7 @@
     });
 
     if (state.selected) {
-      const target = selectedPoint(state.selected, radius, cx, cy, headingRad);
+      const target = selectedPoint(state.selected, radius, cx, cy);
       if (target) {
         ctx.beginPath();
         ctx.strokeStyle = 'rgba(169,213,189,.95)';
@@ -595,10 +746,11 @@
     ctx.fill();
   }
 
-  function selectedPoint(selection, radius, cx, cy, headingRad) {
+  function selectedPoint(selection, radius, cx, cy) {
     const point = positionOf(selection);
     if (!point.known || point.alt < 0) return null;
-    return project(point.az, point.alt, radius, cx, cy, headingRad);
+    const projected = project(point.az, point.alt, radius, cx, cy);
+    return projected.theta > 90.05 ? null : projected;
   }
 
   // ------------------------------------------------------------- selection ---
@@ -610,7 +762,14 @@
     state.selected = selection;
     if (locate && selection) {
       const point = positionOf(selection);
-      if (point.known) setHeading(point.az);
+      if (point.known) {
+        if (viewMode === 'free') {
+          setViewAz(point.az);
+          setViewAlt(point.alt);
+        } else {
+          setHeading(point.az);
+        }
+      }
     }
     applySelectionClasses();
     updateDetailCard();
@@ -826,14 +985,59 @@
   }
 
   // ----------------------------------------------------------------- events ---
+  function updateViewReadout() {
+    const rounded = ((Math.round(viewMode === 'free' ? viewAz : heading) % 360) + 360) % 360;
+    const cardinal = cardinalName(rounded);
+    headingSlider.value = String(rounded);
+    $('#heading-readout').textContent = `${String(rounded).padStart(3, '0')}°`;
+    $('#heading-cardinal').textContent = viewMode === 'free'
+      ? (viewAlt >= 89.5 ? '天顶' : `${cardinal} · ${formatAlt(viewAlt)}`)
+      : cardinal;
+    $('#slider-heading').innerHTML = `${String(rounded).padStart(3, '0')}° <small>${cardinal}</small>`;
+    $('#slider-altitude').textContent = formatAlt(viewAlt);
+  }
+
   function setHeading(value) {
     heading = ((Number(value) % 360) + 360) % 360;
-    const rounded = Math.round(heading) % 360;
-    headingSlider.value = String(rounded);
-    const cardinal = cardinalName(rounded);
-    $('#heading-readout').textContent = `${String(rounded).padStart(3, '0')}°`;
-    $('#heading-cardinal').textContent = cardinal;
-    $('#slider-heading').innerHTML = `${String(rounded).padStart(3, '0')}° <small>${cardinal}</small>`;
+    updateViewReadout();
+    invalidate(false);
+  }
+
+  function setViewAz(value) {
+    viewAz = ((Number(value) % 360) + 360) % 360;
+    updateViewReadout();
+    invalidate(false);
+  }
+
+  function setViewAlt(value) {
+    viewAlt = Math.max(MIN_VIEW_ALT, Math.min(90, Number(value)));
+    updateViewReadout();
+    invalidate(false);
+  }
+
+  function applyViewModeUI() {
+    const free = viewMode === 'free';
+    $('#mode-zenith').setAttribute('aria-pressed', free ? 'false' : 'true');
+    $('#mode-free').setAttribute('aria-pressed', free ? 'true' : 'false');
+    stage.classList.toggle('free-view', free);
+    $('#canvas-hint-text').textContent = free ? '拖动移动视野 · 点击天体查看详情' : '拖动旋转 · 点击天体查看详情';
+    $('#view-mode-note').textContent = free ? '地平坐标 · 自由视角（天顶在上）' : '地平坐标 · 仰视（东在左）';
+    updateViewReadout();
+  }
+
+  function setViewMode(mode) {
+    if (mode !== 'free' && mode !== 'zenith') return;
+    if (mode === viewMode) return;
+    if (mode === 'free') {
+      // Keep the current orientation: at the zenith the dome rolls 180°.
+      viewAz = (heading + 180) % 360;
+      viewAlt = 90;
+    } else {
+      heading = ((viewAz + 180) % 360 + 360) % 360;
+      viewAlt = 90;
+    }
+    viewMode = mode;
+    applyViewModeUI();
     invalidate(false);
   }
 
@@ -857,6 +1061,15 @@
   function orientationChanged(event) {
     let direction = event.webkitCompassHeading;
     if (!Number.isFinite(direction) && event.absolute && Number.isFinite(event.alpha)) direction = (360 - event.alpha) % 360;
+    if (viewMode === 'free') {
+      if (Number.isFinite(direction)) setViewAz(direction);
+      if (Number.isFinite(event.beta)) {
+        const gamma = Number.isFinite(event.gamma) ? event.gamma : 0;
+        const tilt = Math.asin(Math.max(-1, Math.min(1, -Math.cos(event.beta * DEG) * Math.cos(gamma * DEG)))) * RAD2DEG;
+        setViewAlt(tilt);
+      }
+      return;
+    }
     if (Number.isFinite(direction)) setHeading(direction);
   }
 
@@ -943,7 +1156,12 @@
   });
   latitudeInput.addEventListener('change', () => invalidate(true));
   longitudeInput.addEventListener('change', () => invalidate(true));
-  headingSlider.addEventListener('input', () => setHeading(Number(headingSlider.value)));
+  headingSlider.addEventListener('input', () => {
+    if (viewMode === 'free') setViewAz(Number(headingSlider.value));
+    else setHeading(Number(headingSlider.value));
+  });
+  $('#mode-zenith').addEventListener('click', () => setViewMode('zenith'));
+  $('#mode-free').addEventListener('click', () => setViewMode('free'));
   $('#now-button').addEventListener('click', goLive);
   $('#sync-button').addEventListener('click', goLive);
   $('#play-button').addEventListener('click', togglePlay);
@@ -1000,8 +1218,27 @@
       x: event.clientX,
       y: event.clientY,
       angle: Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * RAD2DEG,
-      heading
+      heading,
+      mode: viewMode,
+      radius: Math.min(rect.width * 0.44, rect.height * 0.43) * zoom
     };
+    if (dragStart.mode === 'free') {
+      const a = viewAz * DEG;
+      const v = viewAlt * DEG;
+      const cosA = Math.cos(a);
+      const sinA = Math.sin(a);
+      const cosV = Math.cos(v);
+      const sinV = Math.sin(v);
+      dragStart.Cx = cosV * sinA;
+      dragStart.Cy = cosV * cosA;
+      dragStart.Cz = sinV;
+      dragStart.Rx = cosA;
+      dragStart.Ry = -sinA;
+      dragStart.Rz = 0;
+      dragStart.Ux = -sinV * sinA;
+      dragStart.Uy = -sinV * cosA;
+      dragStart.Uz = cosV;
+    }
     dragMoved = false;
     try {
       canvas.setPointerCapture(event.pointerId);
@@ -1012,6 +1249,24 @@
   canvas.addEventListener('pointermove', (event) => {
     if (!dragStart || sensorEnabled) return;
     if (Math.abs(event.clientX - dragStart.x) > 3 || Math.abs(event.clientY - dragStart.y) > 3) dragMoved = true;
+    if (dragStart.mode === 'free') {
+      // Grab semantics: the patch of sky under the pointer follows the pointer.
+      const dx = event.clientX - dragStart.x;
+      const dy = event.clientY - dragStart.y;
+      const alpha = (Math.PI / 2) * Math.hypot(dx, dy) / Math.max(1, dragStart.radius);
+      const tx = -dx * dragStart.Rx + dy * dragStart.Ux;
+      const ty = -dx * dragStart.Ry + dy * dragStart.Uy;
+      const tz = -dx * dragStart.Rz + dy * dragStart.Uz;
+      const tlen = Math.hypot(tx, ty, tz) || 1;
+      const sinAlpha = Math.sin(alpha);
+      const cosAlpha = Math.cos(alpha);
+      const nx = dragStart.Cx * cosAlpha + (tx / tlen) * sinAlpha;
+      const ny = dragStart.Cy * cosAlpha + (ty / tlen) * sinAlpha;
+      const nz = dragStart.Cz * cosAlpha + (tz / tlen) * sinAlpha;
+      setViewAz((Math.atan2(nx, ny) * RAD2DEG + 360) % 360);
+      setViewAlt(Math.asin(Math.max(-1, Math.min(1, nz))) * RAD2DEG);
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const angle = Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * RAD2DEG;
     const delta = ((angle - dragStart.angle + 540) % 360) - 180;
@@ -1065,5 +1320,6 @@
 
   renderList();
   updateDetailCard();
+  applyViewModeUI();
   requestAnimationFrame(frame);
 })();
