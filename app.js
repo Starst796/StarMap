@@ -157,6 +157,8 @@
 
   let heading = 0;
   let zoom = 1;
+  const ZOOM_MIN = 0.8;
+  const ZOOM_MAX = 100;
   let sensorEnabled = false;
   let sensorHandler = null;
   const MIN_VIEW_ALT = -15;
@@ -1247,8 +1249,23 @@
   $('#locate-button').addEventListener('click', locate);
   $('#sensor-button').addEventListener('click', toggleSensor);
   $('#detail-close').addEventListener('click', clearSelection);
-  $('#zoom-out').addEventListener('click', () => { zoom = Math.max(0.8, zoom - 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
-  $('#zoom-in').addEventListener('click', () => { zoom = Math.min(4.0, zoom + 0.1); $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`; invalidate(false); });
+  // Adaptive zoom step. Leading digit 1–2 gets one decade below the current
+  // order, leading digit 2–9 gets the current order, so the ladder reads
+  // 0.8→0.9→1.0→1.1…1.9→2→3…9→10→11…19→20→30…→100.
+  function zoomStep(value) {
+    const order = 10 ** Math.floor(Math.log10(value));
+    return value / order < 2 ? order / 10 : order;
+  }
+
+  function nudgeZoom(direction) {
+    const next = Number((zoom + zoomStep(zoom) * direction).toFixed(2));
+    zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`;
+    invalidate(false);
+  }
+
+  $('#zoom-out').addEventListener('click', () => nudgeZoom(-1));
+  $('#zoom-in').addEventListener('click', () => nudgeZoom(1));
 
   document.querySelectorAll('.object-tabs [data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -1334,9 +1351,7 @@
   canvas.addEventListener('pointercancel', () => { dragStart = null; dragMoved = false; });
   canvas.addEventListener('wheel', (event) => {
     event.preventDefault();
-    zoom = Math.min(4.0, Math.max(0.8, zoom - Math.sign(event.deltaY) * 0.06));
-    $('#zoom-label').textContent = `${Math.round(zoom * 100)}%`;
-    invalidate(false);
+    nudgeZoom(-Math.sign(event.deltaY));
   }, { passive: false });
 
   function handleTap(event) {
