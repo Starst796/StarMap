@@ -12,6 +12,7 @@
   const latitudeInput = $('#latitude-input');
   const longitudeInput = $('#longitude-input');
   const headingSlider = $('#heading-slider');
+  const altitudeSlider = $('#altitude-slider');
   const objectList = $('#object-list');
   const searchInput = $('#object-search');
   const detailCard = $('#detail-card');
@@ -1059,6 +1060,7 @@
     const rounded = ((Math.round(viewMode === 'free' ? viewAz : heading) % 360) + 360) % 360;
     const cardinal = cardinalName(rounded);
     headingSlider.value = String(rounded);
+    altitudeSlider.value = String(viewAlt);
     $('#heading-readout').textContent = `${String(rounded).padStart(3, '0')}°`;
     $('#heading-cardinal').textContent = viewMode === 'free'
       ? (viewAlt >= 89.5 ? '天顶' : `${cardinal} · ${formatAlt(viewAlt)}`)
@@ -1090,6 +1092,8 @@
     $('#mode-zenith').setAttribute('aria-pressed', free ? 'false' : 'true');
     $('#mode-free').setAttribute('aria-pressed', free ? 'true' : 'false');
     stage.classList.toggle('free-view', free);
+    // Altitude is pinned at the zenith outside free mode, so its slider is inert.
+    altitudeSlider.disabled = !free;
     $('#view-mode-note').textContent = free ? '地平坐标 · 自由视角（天顶在上）' : '地平坐标 · 仰视（东在左）';
     updateViewReadout();
   }
@@ -1229,6 +1233,9 @@
     if (viewMode === 'free') setViewAz(Number(headingSlider.value));
     else setHeading(Number(headingSlider.value));
   });
+  altitudeSlider.addEventListener('input', () => {
+    setViewAlt(Number(altitudeSlider.value));
+  });
   $('#mode-zenith').addEventListener('click', () => setViewMode('zenith'));
   $('#mode-free').addEventListener('click', () => setViewMode('free'));
   $('#now-button').addEventListener('click', goLive);
@@ -1288,26 +1295,11 @@
       y: event.clientY,
       angle: Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2) * RAD2DEG,
       heading,
+      az: viewAz,
+      alt: viewAlt,
       mode: viewMode,
       radius: Math.min(rect.width * 0.44, rect.height * 0.43) * zoom
     };
-    if (dragStart.mode === 'free') {
-      const a = viewAz * DEG;
-      const v = viewAlt * DEG;
-      const cosA = Math.cos(a);
-      const sinA = Math.sin(a);
-      const cosV = Math.cos(v);
-      const sinV = Math.sin(v);
-      dragStart.Cx = cosV * sinA;
-      dragStart.Cy = cosV * cosA;
-      dragStart.Cz = sinV;
-      dragStart.Rx = cosA;
-      dragStart.Ry = -sinA;
-      dragStart.Rz = 0;
-      dragStart.Ux = -sinV * sinA;
-      dragStart.Uy = -sinV * cosA;
-      dragStart.Uz = cosV;
-    }
     dragMoved = false;
     try {
       canvas.setPointerCapture(event.pointerId);
@@ -1319,21 +1311,13 @@
     if (!dragStart || sensorEnabled) return;
     if (Math.abs(event.clientX - dragStart.x) > 3 || Math.abs(event.clientY - dragStart.y) > 3) dragMoved = true;
     if (dragStart.mode === 'free') {
-      // Grab semantics: the patch of sky under the pointer follows the pointer.
+      // Axis-separated pan: horizontal drag turns the azimuth, vertical drag
+      // raises/lowers the altitude, so the sky follows the pointer per axis.
       const dx = event.clientX - dragStart.x;
       const dy = event.clientY - dragStart.y;
-      const alpha = (Math.PI / 2) * Math.hypot(dx, dy) / Math.max(1, dragStart.radius);
-      const tx = -dx * dragStart.Rx + dy * dragStart.Ux;
-      const ty = -dx * dragStart.Ry + dy * dragStart.Uy;
-      const tz = -dx * dragStart.Rz + dy * dragStart.Uz;
-      const tlen = Math.hypot(tx, ty, tz) || 1;
-      const sinAlpha = Math.sin(alpha);
-      const cosAlpha = Math.cos(alpha);
-      const nx = dragStart.Cx * cosAlpha + (tx / tlen) * sinAlpha;
-      const ny = dragStart.Cy * cosAlpha + (ty / tlen) * sinAlpha;
-      const nz = dragStart.Cz * cosAlpha + (tz / tlen) * sinAlpha;
-      setViewAz((Math.atan2(nx, ny) * RAD2DEG + 360) % 360);
-      setViewAlt(Math.asin(Math.max(-1, Math.min(1, nz))) * RAD2DEG);
+      const degPerPixel = 90 / Math.max(1, dragStart.radius);
+      setViewAz(dragStart.az - dx * degPerPixel);
+      setViewAlt(dragStart.alt + dy * degPerPixel);
       return;
     }
     const rect = canvas.getBoundingClientRect();

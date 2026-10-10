@@ -85,7 +85,13 @@
             <button id="mode-zenith" type="button" aria-pressed="true">天顶模式</button>
             <button id="mode-free" type="button" aria-pressed="false">自由模式</button>
           </div>
-          <div class="orientation-control"><div class="orientation-values"><span>方位角</span><strong id="slider-heading">000° <small>北</small></strong></div><input id="heading-slider" type="range" min="0" max="359" value="0" aria-label="调整星图朝向"><div class="range-labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div><div class="orientation-altitude">视场中心高度 <strong id="slider-altitude">+90.0°</strong></div></div>
+          <div class="orientation-control">
+            <div class="orientation-values"><span>方位角</span><strong id="slider-heading">000° <small>北</small></strong></div>
+            <input id="heading-slider" type="range" min="0" max="359" value="0" aria-label="调整星图朝向">
+            <div class="range-labels"><span>N</span><span>E</span><span>S</span><span>W</span><span>N</span></div>
+            <div class="orientation-altitude"><span>高度角</span><strong id="slider-altitude">+90.0°</strong></div>
+            <input id="altitude-slider" type="range" min="-15" max="90" step="0.5" value="90" aria-label="调整视场高度角" disabled>
+          </div>
           <button class="sensor-button" id="sensor-button" type="button"><span class="sensor-icon" aria-hidden="true">◎</span><span><strong>陀螺仪同步</strong><small id="sensor-status">手动方位</small></span><span class="toggle-indicator" aria-hidden="true"></span></button>
           <p class="permission-note">传感器需在安全来源下由你主动开启。浏览器不支持时可拖动星图或滑动方位条。</p>
         </section>
