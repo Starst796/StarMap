@@ -6,7 +6,7 @@ from flask import Flask, abort, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
 app = Flask(__name__)
-ASSETS = {"app.js", "styles.css", "catalog.js"}
+ASSETS = {"app.js", "styles.css", "catalog.js", "astronomy.browser.min.js"}
 
 
 @app.get("/")
